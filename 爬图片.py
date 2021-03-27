@@ -5,13 +5,12 @@ Created on Sat Feb 27 12:24:25 2021
 @author: Administrator
 
 爬取百度贴吧中指定帖子中的所有图片——————requests-bs4-re路线
-1.0,2.0,2.5,2.6
-3.0
+1.0,2.0,2.5,2.6,3.0
+3.2
 """
-import requests
+import requests,os,re,time,random
 from bs4 import BeautifulSoup
-import os
-import re
+
 
 def getHTTPtext(url):
     try:
@@ -120,6 +119,36 @@ def main(ID):
     len_link = len(final_list)
     for count,link in final_list:
         download_pic(link,count,path_now,len_link)
-    
-ID = int(input("id:"))
-main(ID)
+
+real_count = count = 0
+luck = random.randint(0, 20)  
+while True:
+    if count == 0:
+        ID = int(input("输入要爬取帖子的id:"))
+        main(ID)
+        real_count += 1
+        choose = int(input('''是否退出？
+1.是
+2.否
+选择：'''))
+        if choose == 1:
+            count += 1
+        elif choose == 2:
+            continue
+        else:
+            print("？")
+            time.sleep(1)
+            print("emmmm")
+            time.sleep(1)
+            print("好吧")
+            time.sleep(1)
+            break
+    if count == 1:
+        print("感谢您的使用,本次共爬取了{}次".format(real_count))
+        time.sleep(1)
+        if luck == 0:
+            print("注意身体")
+            time.sleep(1)
+        time.sleep(1)
+        break
+      
