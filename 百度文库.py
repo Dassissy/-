@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 爬取百度文库信息
-截图-图片裁剪（没做）-转文字
+截图-图片裁剪-转文字
 """
 import requests
 from bs4 import BeautifulSoup
@@ -9,9 +9,10 @@ import re
 import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select,WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os
+from PIL import Image
 
 def get_title(wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):
     url = "https://wenku.baidu.com/view/" + wenku_id + ".html"
@@ -48,12 +49,12 @@ def get_clean_window(wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):#登�
         
 def get_screenshot(scr_list,title = ' '):
     height = driver.find_element_by_tag_name("body").size["height"]
-    page_height = 730
+    page_height = 670#实际为730，但是截多一点有好处
     times = height//page_height
     js_0 = "var q=document.documentElement.scrollTop=" + str(height//2)#下拉引出奇怪东西
     driver.execute_script(js_0)
     time.sleep(1.5)
-    driver.find_element_by_xpath(r"//div[@class='vip-pop-wrap inner-vip'][1]/span").click()#关掉
+    driver.find_element(By.XPATH,r"//div[@class='vip-pop-wrap inner-vip'][1]/span").click()#关掉
     driver.execute_script("var q=document.documentElement.scrollTop=0")#回到顶部
     driver.maximize_window()#全屏显示
     time.sleep(1)
@@ -67,7 +68,23 @@ def get_screenshot(scr_list,title = ' '):
         scr_list.append(scr_name)
         driver.save_screenshot(scr_name)
         time.sleep(0.1)
-    
+    #删除后三张图
+    for i in range(2):#如此往复3次
+        path = scr_list[-1]#最后一张图被删除
+        os.remove(path)
+        scr_list.pop(-1)#最后一张图被弹出
+        
+def crop_pictures(scr_list):
+    count = 0
+    for path in scr_list:
+        im = Image.open(path)
+        if count == 0:
+            cropped_image = im.crop((448,457,1150,915))#第一张自然不一样
+            count += 1
+        else:
+            cropped_image = im.crop((448,113,1150,870))#吃的是元组所以套两层括号哦
+        cropped_image.save(path)
+           
 def initialize_changeTOtext():#初始化图片转文字
     url = "http://www.imagetotxt.com/"
     driver.get(url)
@@ -109,11 +126,11 @@ def change_to_text(scr_list,html_dict,error_dict):
         driver.close()#关闭窗口
         driver.switch_to.window(original_handle)#聚焦原窗口
         times += 1
-    print(str(error_dict))
 
 def error_handling(error_dict,html_dict):
     time.sleep(2)
     if error_dict:#如果字典非空
+        print(str(error_dict))#写一下错误字典
         initialize_changeTOtext()#重开转文字网站
         original_handle = driver.current_window_handle#拿到窗口句柄方便之后聚焦
         error_list = []
@@ -153,13 +170,13 @@ def main():
     html_dict = {}
     error_dict = {}
     get_screenshot(scr_list,title)
+    crop_pictures(scr_list)
     change_to_text(scr_list,html_dict,error_dict)
     error_handling(error_dict,html_dict)
     #临时代码
     string = ''
     for count in html_dict:
         string = string + html_dict[count]
-    print(string)
     with open("D://测试文档//测试文本.txt","w",encoding='utf-8') as f:
         f.write(string)
         f.close()
