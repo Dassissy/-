@@ -3,16 +3,17 @@
 爬取百度文库信息
 截图-图片裁剪-转文字
 """
-import requests
-from bs4 import BeautifulSoup
+import requests#发送请求较快,用于拿到文章标题
+from bs4 import BeautifulSoup#提取网页中需要的内容
 import re
 import time
+#走网页前端,故使用selenium库
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import os
-from PIL import Image
+import os#文件操作
+from PIL import Image#图片操作
 
 def get_title(wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):
     url = "https://wenku.baidu.com/view/" + wenku_id + ".html"
@@ -22,8 +23,6 @@ def get_title(wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):
     title = soup.find('title').string
     title = title.split(' ')[0]
     return title
-
-driver = webdriver.Chrome()
 
 def get_clean_window(wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):#登录百度文库
     url = "https://wenku.baidu.com/view/" + wenku_id + ".html"
@@ -160,24 +159,33 @@ def error_handling(error_dict,html_dict):
             del error_dict[i]
         error_handling(error_dict, html_dict)#递归直至解决所有问题         
     else:
-        driver.quit()#退出循环
+        driver.quit()#递归出口,关闭浏览器
+        
+def out(html_dict):
+    key_list = list(html_dict.keys())
+    key_list.sort()#排序
+    out_string = ''
+    #这里还有一个把重复部分删除以及把奇怪的东西删掉的部分没有做
+    for key in key_list:
+        soup = BeautifulSoup(html_dict[key],"html.parser")
+        string = soup.find("pre").string#提取文字部分
+        out_string = out_string + string
+    with open("D://阅读//测试文本.txt","w",encoding='utf-8') as f:
+        f.write(out_string)
+        f.close()
 
 def main():
-    title = get_title()
-    get_clean_window()
+    title = get_title()#首先拿到标题
+    get_clean_window()#把窗口的各种影响阅读的弹窗清一遍
     time.sleep(1)
     scr_list = []
     html_dict = {}
-    error_dict = {}
-    get_screenshot(scr_list,title)
-    crop_pictures(scr_list)
-    change_to_text(scr_list,html_dict,error_dict)
-    error_handling(error_dict,html_dict)
-    #临时代码
-    string = ''
-    for count in html_dict:
-        string = string + html_dict[count]
-    with open("D://测试文档//测试文本.txt","w",encoding='utf-8') as f:
-        f.write(string)
-        f.close()
+    error_dict = {}#字典不能连续赋值
+    get_screenshot(scr_list,title)#屏幕截图
+    crop_pictures(scr_list)#将不必要的部分裁去
+    change_to_text(scr_list,html_dict,error_dict)#图片转文字
+    error_handling(error_dict,html_dict)#转文字网站服务器容易崩,所以搞一个错误处理
+    out(html_dict)#输出成文档
+   
+driver = webdriver.Chrome()
 main()
