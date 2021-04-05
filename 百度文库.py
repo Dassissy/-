@@ -2,6 +2,8 @@
 """
 爬取百度文库信息
 截图-图片裁剪-转文字
+
+！！转文字多次再去重不可行，反而会使输出更加混乱
 """
 import requests#发送请求较快,用于拿到文章标题
 from bs4 import BeautifulSoup#提取网页中需要的内容
@@ -14,6 +16,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os#文件操作
 from PIL import Image#图片操作
+from fuzzywuzzy import fuzz#相似度判定
 
 def get_title(wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):
     url = "https://wenku.baidu.com/view/" + wenku_id + ".html"
@@ -48,7 +51,7 @@ def get_clean_window(wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):#登�
         
 def get_screenshot(scr_list,title = ' '):
     height = driver.find_element_by_tag_name("body").size["height"]
-    page_height = 670#实际为730，但是截多一点有好处
+    page_height = 670#实际为730,截多一点
     times = height//page_height
     js_0 = "var q=document.documentElement.scrollTop=" + str(height//2)#下拉引出奇怪东西
     driver.execute_script(js_0)
@@ -86,7 +89,11 @@ def crop_pictures(scr_list):
            
 def initialize_changeTOtext():#初始化图片转文字
     url = "http://www.imagetotxt.com/"
-    driver.get(url)
+    try:
+        driver.get(url)
+    except:#这服务器好差
+        time.sleep(60)
+        driver.get(url)
     choose = driver.find_element(By.ID,"ddlLanguage")#语言改为英语
     choose.click()
     chooses = choose.find_elements(By.TAG_NAME,"option")
@@ -126,9 +133,9 @@ def change_to_text(scr_list,html_dict,error_dict):
         driver.switch_to.window(original_handle)#聚焦原窗口
         times += 1
 
-def error_handling(error_dict,html_dict):
+def error_handling(error_dict,html_dict,PASS=0):#PASS的触发：某些图片总是出错（两次以上）
     time.sleep(2)
-    if error_dict:#如果字典非空
+    if error_dict and PASS <= 2:#如果字典非空,且未触发PASS
         print(str(error_dict))#写一下错误字典
         initialize_changeTOtext()#重开转文字网站
         original_handle = driver.current_window_handle#拿到窗口句柄方便之后聚焦
@@ -157,7 +164,9 @@ def error_handling(error_dict,html_dict):
             driver.switch_to.window(original_handle)#聚焦原窗口
         for i in error_list:
             del error_dict[i]
-        error_handling(error_dict, html_dict)#递归直至解决所有问题         
+        if not error_list:#若错误无法解决
+            PASS += 1
+        error_handling(error_dict, html_dict ,PASS)#递归直至解决所有问题         
     else:
         driver.quit()#递归出口,关闭浏览器
         
@@ -165,14 +174,41 @@ def out(html_dict):
     key_list = list(html_dict.keys())
     key_list.sort()#排序
     out_string = ''
-    #这里还有一个把重复部分删除以及把奇怪的东西删掉的部分没有做
     for key in key_list:
         soup = BeautifulSoup(html_dict[key],"html.parser")
         string = soup.find("pre").string#提取文字部分
         out_string = out_string + string
-    with open("D://阅读//测试文本.txt","w",encoding='utf-8') as f:
+    lines = out_string.split("\n")
+    out_string = ''
+    duplicate_removal(lines)#去重
+    for line in lines:
+        out_string = out_string + line + "\n"#把空格补回来
+    with open("D://阅读//测试文本4.txt","w",encoding='utf-8') as f:
         f.write(out_string)
         f.close()
+        
+def duplicate_removal(lines,count = 0):#去重
+    line = lines[count]#每次仅取一句进行查重
+    index_list = []
+    index = count + 1#不要和自己查重
+    len_lines = len(lines)
+    duplicate_list = []#重复的放到一个列表里头
+    for l in lines[index:]:
+        if fuzz.ratio(line,l) >= 80:#相似度>=80就判定为一致
+            index_list.append(lines.index(l))
+    for i in index_list:
+        duplicate_list.append(lines[i])
+        lines.pop(i)
+    duplicate_list.append(lines[count])#把用于匹配的字符串放入重复列表中
+    if len(duplicate_list) >= 4:#多次重复则是真的重复
+        pass
+    else:
+        lines[count] = duplicate_list[-1]#重复数为1或2则取后一个  
+    count += 1
+    if len_lines == len(lines):#递归出口,当没有重复时退出递归
+        pass
+    else:
+        duplicate_removal(lines,count)#下一层递归
 
 def main():
     title = get_title()#首先拿到标题
@@ -187,5 +223,5 @@ def main():
     error_handling(error_dict,html_dict)#转文字网站服务器容易崩,所以搞一个错误处理
     out(html_dict)#输出成文档
    
-driver = webdriver.Chrome()
+driver = webdriver.Chrome()#用谷歌,只能用谷歌,用火狐的话要改好多
 main()
