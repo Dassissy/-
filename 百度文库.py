@@ -191,7 +191,6 @@ def duplicate_removal(lines,count = 0):#去重
     line = lines[count]#每次仅取一句进行查重
     index_list = []
     index = count + 1#不要和自己查重
-    len_lines = len(lines)
     duplicate_list = []#重复的放到一个列表里头
     for l in lines[index:]:
         if fuzz.ratio(line,l) >= 80:#相似度>=80就判定为一致
@@ -205,7 +204,7 @@ def duplicate_removal(lines,count = 0):#去重
     else:
         lines[count] = duplicate_list[-1]#重复数为1或2则取后一个  
     count += 1
-    if len_lines == len(lines):#递归出口,当没有重复时退出递归
+    if count == len(lines):#递归出口，运行到底时退出
         pass
     else:
         duplicate_removal(lines,count)#下一层递归
