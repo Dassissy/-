@@ -18,7 +18,7 @@ import os#文件操作
 from PIL import Image#图片操作
 from fuzzywuzzy import fuzz#相似度判定
 
-def get_info(wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):#拿到一些信息
+def get_info(wenku_id):#拿到一些信息
     url = "https://wenku.baidu.com/view/" + wenku_id + ".html"
     r = requests.get(url)
     r.encoding = "utf-8"
@@ -30,7 +30,7 @@ def get_info(wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):#拿到一些�
     num_of_pages = divider.find_next().string[:-1]
     return title,num_of_pages
 
-def get_clean_window(num_of_pages,wenku_id="02058322afaad1f34693daef5ef7ba0d4b736df2"):#登录百度文库
+def get_clean_window(num_of_pages,wenku_id):#登录百度文库，点击“展开”，并将不需要的页面元素（如广告）删除
     url = "https://wenku.baidu.com/view/" + wenku_id + ".html"
     with open(r'D:\python\wenku_cookie.txt','r') as f:
         cookie_string = f.read()
@@ -77,16 +77,16 @@ def get_clean_window(num_of_pages,wenku_id="02058322afaad1f34693daef5ef7ba0d4b73
         driver.execute_script('''var element = arguments[0];
                               element.parentNode.removeChild(element)''',wm)
                               """
-    #还有一个小东西放到下一个函数去关掉
         
 def get_screenshot(scr_list,title = ' '):
     height = driver.find_element(By.TAG_NAME,"body").size["height"]
     page_height = 670#实际为730,截多一点
     times = height//page_height
-    js_0 = "var q=document.documentElement.scrollTop=" + str(height//2)#下拉引出奇怪东西
-    driver.execute_script(js_0)
-    time.sleep(1.5)
-    driver.find_element(By.XPATH,r"//div[@class='vip-pop-wrap inner-vip'][1]/span").click()#关掉
+    #不需要这部分了
+    #js_0 = "var q=document.documentElement.scrollTop=" + str(height//2)#下拉引出奇怪东西
+    #driver.execute_script(js_0)
+    #time.sleep(1.5)
+    #driver.find_element(By.XPATH,r"//div[@class='vip-pop-wrap inner-vip'][1]/span").click()#关掉
     driver.execute_script("var q=document.documentElement.scrollTop=0")#回到顶部
     driver.maximize_window()#全屏显示
     time.sleep(1)
@@ -137,6 +137,53 @@ def judge(img):#判断图片是否完整
     else:
         return False#图片不完整
     
+def judge_2(IM,next_IM):#竖向检测
+    if IM == next_IM:
+        return False
+    else:
+        return True
+    
+def get_lines(im,num_of_lines):
+    im = im.rotate(180)#翻转
+    l,w = im.size
+    change_times = 0
+    judgement = True
+    for i in range(w):
+        box = (0,i,l,i+1)
+        IM = im.crop(box)
+        JUDGEMENT = judge(IM)
+        if JUDGEMENT == judgement:#相同则过
+            continue
+        else:
+            judgement = JUDGEMENT#若不同，执行下头的代码
+        change_times += 1#记变换一次
+        if change_times == 1:
+            first_i = i#若第一次变换，记录坐标
+        elif change_times%2 == 0:#若为偶数次变换，则是截到了整行
+            if change_times/2 == num_of_lines:#变换次数除以2，即为截到的行数
+                last_i = i#记录下坐标
+                break
+    box = (0,first_i,l,last_i)
+    im_lines = im.crop(box)#裁剪
+    im_lines = im_lines.rotate(180)#翻转
+    return im_lines
+        
+def duplicate_removal(path, next_path):#去重
+    im = Image.open(path)
+    next_im = Image.open(next_path)
+    num_of_lines = 1
+    im_lines = get_lines(im=im,num_of_lines=num_of_lines)
+    length_of_lines = im_lines.size[1]
+    l,w = next_im.size
+    for i in range(w):
+        box = (0,i,l,i+length_of_lines)
+        next_im_lines = next_im.crop(box)
+        if im_lines == next_im_lines:
+            new_box = (0,i+length_of_lines,l,w)
+            next_im = next_im.crop(new_box)
+            next_im.save(next_path)
+            break
+    
 def crop_pictures(scr_list):
     """
     不需要截取了
@@ -155,6 +202,9 @@ def crop_pictures(scr_list):
         im = Image.open(path)
         #print(("im.size is:{}").format(im.size))
         l,w = im.size
+        box = (0,0,l-25,w)
+        im = im.crop(box)#削去下拉条
+        l,w = im.size
         for i in range(w):#自上而下遍历图片的每一列
             box = (0,i,l,i+1)#左上右下
             IM = im.crop(box)
@@ -169,11 +219,11 @@ def crop_pictures(scr_list):
                 continue
         im = im.rotate(180)#翻转
         l,w = im.size#图片大小可能出现变化
-        for i in range(w):#自上而下遍历图片的每一列
+        for i in range(w):#自上而下遍历图片的每一行
             box = (0,i,l,i+1)#左上右下
             IM = im.crop(box)
             judgement = judge(IM)
-            if judgement == True:
+            if judgement:
                 if i != 0:
                     new_box = (0,i,l,w)
                     im = im.crop(new_box)
@@ -181,9 +231,101 @@ def crop_pictures(scr_list):
                 break
             else:
                 continue
-        im = im.rotate(180)#转回来
+        #不转了
+        #接下来进行竖直分割
+        l,w = im.size
+        l_list = []
+        ll = 0
+        while ll < l:
+            l_list.append(ll)
+            ll += 4#四行截一次
+        for i in l_list:#从左往右
+            box = (i,0,i+1,w)
+            IM = im.crop(box)
+            next_box = (i+4,0,i+5,w)
+            next_IM = im.crop(next_box)
+            if judge_2(IM=IM,next_IM=next_IM):
+                #类似二分法进行细化检测
+                for j in range(i,i+4+1):#前闭后开故末尾+1
+                    box = (j,0,j+1,w)
+                    IM = im.crop(box)
+                    next_box = (j+1,0,j+2,w)
+                    next_IM = im.crop(next_box)
+                    if judge_2(IM,next_IM):
+                        new_box = (j+1,0,l,w)
+                        im = im.crop(new_box)
+                        break
+                break
+            else:
+                continue
+        im = im.rotate(180)#这时候再转
+        l,w = im.size
+        l_list = []
+        ll = 0
+        while ll < l:
+            l_list.append(ll)
+            ll += 2#两行截一次
+        for i in l_list:#从左往右
+            box = (i,0,i+1,w)
+            IM = im.crop(box)
+            next_box = (i+4,0,i+5,w)
+            next_IM = im.crop(next_box)
+            if judge_2(IM=IM,next_IM=next_IM):
+                for j in range(i,i+4+1):
+                    box = (j,0,j+1,w)
+                    IM = im.crop(box)
+                    next_box = (j+1,0,j+2,w)
+                    next_IM = im.crop(next_box)
+                    if judge_2(IM,next_IM):
+                        new_box = (j+1,0,l,w)
+                        im = im.crop(new_box)
+                        break
+                break
+            else:
+                continue
         im.save(path)
-           
+    for i in range(len(scr_list)):#去重
+        if not i == len(scr_list)-1:#不是最后一个的话
+            path = scr_list[i]
+            next_path = scr_list[i+1]
+            duplicate_removal(path=path, next_path=next_path)
+            
+def paste_images(im_path):
+    lw_list = []#记录图片长宽
+    im_list = []#记录图片路径
+    for i in os.listdir(im_path):
+        im_list.append(int(i.split(".")[0]))#字符串与数字排列方式不同：1,2,10;'1','10','2'
+    im_list.sort()
+    img_list = []
+    for i in im_list:
+        img_list.append(im_path+"\\"+str(i)+".png")
+    for path in img_list:
+        im = Image.open(path)
+        lw_list.append(im.size)
+    
+    l0 = lw_list[0][0]
+    w0 = 0
+    for l,w in lw_list:
+        if l > l0:
+            l0 = l
+        w0 += w
+    size = (l0,w0)
+    
+    img_0 = Image.new("RGB",size)#新建底图
+    li,wi = 0,0
+    i = 0
+    for i in range(len(img_list)):
+        img_i = Image.open(img_list[i])
+        l,w = lw_list[i]
+        box = (li,wi,li+l,wi+w)
+        img_0.paste(img_i,box)
+        wi = wi+w
+        i += 1
+        #img_0.save(img_list[0])
+        
+    #img_0.show()
+    img_0.save(im_path+".png")
+
 def initialize_changeTOtext():#初始化图片转文字
     url = "http://www.imagetotxt.com/"
     try:
@@ -267,7 +409,7 @@ def error_handling(error_dict,html_dict,PASS=0):#PASS的触发：某些图片总
     else:
         driver.quit()#递归出口,关闭浏览器
         
-def out(html_dict):
+def out(title,html_dict):
     key_list = list(html_dict.keys())
     key_list.sort()#排序
     out_string = ''
@@ -280,11 +422,11 @@ def out(html_dict):
     duplicate_removal(lines)#去重
     for line in lines:
         out_string = out_string + line + "\n"#把空格补回来
-    with open("D://阅读//测试文本4.txt","w",encoding='utf-8') as f:
+    with open("D://阅读//"+title+".txt","w",encoding='utf-8') as f:
         f.write(out_string)
         f.close()
         
-def duplicate_removal(lines,count = 0):#去重
+"""def duplicate_removal(lines,count = 0):#去重
     line = lines[count]#每次仅取一句进行查重
     index_list = []
     index = count + 1#不要和自己查重
@@ -304,21 +446,24 @@ def duplicate_removal(lines,count = 0):#去重
     if count == len(lines):#递归出口，运行到底时退出
         pass
     else:
-        duplicate_removal(lines,count)#下一层递归
+        duplicate_removal(lines,count)#下一层递归"""
 
-def main():
-    title,num_of_pages = get_info()#首先拿到标题和总页数
-    get_clean_window(num_of_pages=num_of_pages)#把窗口的各种影响阅读的弹窗清一遍
+def main(wenku_id):
+    title,num_of_pages = get_info(wenku_id=wenku_id)#首先拿到标题和总页数
+    get_clean_window(wenku_id=wenku_id,num_of_pages=num_of_pages)#把窗口的各种影响阅读的弹窗清一遍
     time.sleep(1)
     scr_list = []
     html_dict = {}
     error_dict = {}#字典不能连续赋值
     get_screenshot(scr_list,title)#屏幕截图
     crop_pictures(scr_list)#将不必要的部分裁去
+    paste_images(im_path="D://wenku_pics//"+title)#传入文件夹名称
     change_to_text(scr_list,html_dict,error_dict)#图片转文字
     error_handling(error_dict,html_dict)#转文字网站服务器容易崩,所以搞一个错误处理
-    out(html_dict)#输出成文档
+    out(title,html_dict)#输出成文档
 
 driver = webdriver.Chrome()#用谷歌,只能用谷歌,用火狐的话要改好多
-main()
+#wenku_id = "02058322afaad1f34693daef5ef7ba0d4b736df2"
+wenku_id = "e02ddb5a27d3240c8447ef9d"
+main(wenku_id)
 
