@@ -2,8 +2,6 @@
 """
 爬取百度文库信息
 截图-图片裁剪-转文字
-
-!去重部分仍有问题，可能为:较短的句子易被误删
 """
 import requests
 from bs4 import BeautifulSoup#提取网页中需要的内容
@@ -16,7 +14,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os#文件操作
 from PIL import Image#图片操作
-from fuzzywuzzy import fuzz#相似度判定
+#from fuzzywuzzy import fuzz#相似度判定
 
 def get_info(wenku_id):#拿到一些信息
     url = "https://wenku.baidu.com/view/" + wenku_id + ".html"
