@@ -54,7 +54,9 @@ def get_clean_window(num_of_pages,wenku_id):#登录百度文库，点击“展�
                    "//div[@class='right-wrapper no-full-screen']",
                    "//div[@class='color-plate']",
                    "//div[@class='lazy-load']/div[@class='sidebar-wrapper']",
-                   "//div[@class='try-end-fold-page']"]#除广告及水印外所有需删除的元素
+                   "//div[@class='try-end-fold-page']",
+                   "//div[@class='left-wrapper zoom-scale']/div[@class='no-full-screen']",
+                   "//div[@class='lazy-load']"]#除广告及水印外所有需删除的元素
     for ele_path in remove_list:
         ele = driver.find_element(By.XPATH,ele_path)
         driver.execute_script("""var element = arguments[0];
@@ -77,17 +79,28 @@ def get_clean_window(num_of_pages,wenku_id):#登录百度文库，点击“展�
                               """
         
 def get_screenshot(scr_list,title = ' '):
-    height = driver.find_element(By.TAG_NAME,"body").size["height"]
-    page_height = 670#实际为730,截多一点
-    times = height//page_height
     #不需要这部分了
     #js_0 = "var q=document.documentElement.scrollTop=" + str(height//2)#下拉引出奇怪东西
     #driver.execute_script(js_0)
     #time.sleep(1.5)
     #driver.find_element(By.XPATH,r"//div[@class='vip-pop-wrap inner-vip'][1]/span").click()#关掉
     driver.execute_script("var q=document.documentElement.scrollTop=0")#回到顶部
-    driver.maximize_window()#全屏显示
+    try:
+        driver.maximize_window()#全屏显示
+    except:
+        pass
     time.sleep(1)
+    
+    height = driver.find_element(By.TAG_NAME,"body").size["height"]
+    page_height = 650#实际为730,截多一点
+    times = height//page_height
+    """
+    for i in range(int(times*1.5)):#加载图片
+        js = "var q=document.documentElement.scrollTop=" + str(i*page_height)
+        driver.execute_script(js)
+        time.sleep(0.2)"""
+    
+    driver.execute_script("var q=document.documentElement.scrollTop=0")#回到顶部
     for i in range(times):
         js = "var q=document.documentElement.scrollTop=" + str(i*page_height)
         driver.execute_script(js)
@@ -97,14 +110,45 @@ def get_screenshot(scr_list,title = ' '):
         scr_name = scr_path + str(i+1) + ".png"
         scr_list.append(scr_name)
         driver.save_screenshot(scr_name)
-        time.sleep(0.1)
+        time.sleep(0.5)
+    """不需要了
     #删除后三张图
     for i in range(2):#如此往复3次
         path = scr_list[-1]#最后一张图被删除
         os.remove(path)
-        scr_list.pop(-1)#最后一张图被弹出
-  
-def judge(img):#判断图片是否完整 
+        scr_list.pop(-1)#最后一张图被弹出"""
+
+def del_pic_in_pic(wide,img):
+    img_list = img.load()#获取像素点
+    the_previous_is = False#前一个像素点是图片中的吗
+    l,w = img.size
+    for i in range(l):
+        point_data = img_list[i,0]
+        #print(("point_data is:{}").format(point_data))
+        if point_data[0] <= 245 or point_data[1] <= 245 or point_data[2] <= 245:
+            if not the_previous_is:#即 == False
+                first_p = i#记录第一个
+                the_previous_is = True
+            elif i == l-1:#假如已经是最后一个像素了
+                last_p = i#记录最后一个
+                box = (first_p,0,last_p,1)
+                new_pic = Image.new("1",(last_p-first_p,1),"white")
+                img.paste(new_pic,box)#变成白色的
+                the_previous_is = False
+            elif the_previous_is:#即 == True
+                continue
+        elif the_previous_is:#即 == True:
+            last_p = i#记录最后一个
+            box = (first_p,0,last_p,1)
+            new_pic = Image.new("1",(last_p-first_p,1),"white")
+            img.paste(new_pic,box)#变成白色的
+            the_previous_is = False
+            continue
+        else:
+            continue
+    #img.show()
+    
+def judge(img,next_img):#判断图片是否完整 
     threshold = 210#定义灰度界限
     table = []
     for i in range(256):
@@ -113,13 +157,16 @@ def judge(img):#判断图片是否完整
       else:
         table.append(1)
         
+    del_pic_in_pic(wide=5,img=img)#防止图中图影响判断
+    del_pic_in_pic(wide=5,img=next_img)
+        
     img = img.convert('L')
     bw_img = img.point(table, '1')#图片二值化
     
     size = bw_img.size
     #print(("size is:{}").format(size))
     w = size[0]
-    bw_img_list = bw_img.load()#获取像素点列表
+    bw_img_list = bw_img.load()#获取像素点
     black = 0
     white = 0
     for i in range(w):
@@ -133,6 +180,8 @@ def judge(img):#判断图片是否完整
     if black == 0:
         return True#图片完整
     else:
+        if img == next_img:#若与下一张图一样
+            return True#那它还是完整的（排除表格影响）
         return False#图片不完整
     
 def judge_2(IM,next_IM):#竖向检测
@@ -147,20 +196,25 @@ def get_lines(im,num_of_lines):
     change_times = 0
     judgement = True
     for i in range(w):
-        box = (0,i,l,i+1)
-        IM = im.crop(box)
-        JUDGEMENT = judge(IM)
-        if JUDGEMENT == judgement:#相同则过
-            continue
-        else:
-            judgement = JUDGEMENT#若不同，执行下头的代码
-        change_times += 1#记变换一次
-        if change_times == 1:
-            first_i = i#若第一次变换，记录坐标
-        elif change_times%2 == 0:#若为偶数次变换，则是截到了整行
-            if change_times/2 == num_of_lines:#变换次数除以2，即为截到的行数
-                last_i = i#记录下坐标
-                break
+        if i <= w//3:
+            box = (0,i,l,i+1)
+            IM = im.crop(box)
+            next_IM = im.crop((0,i,l,i+1))
+            JUDGEMENT = judge(IM,next_IM)
+            if JUDGEMENT == judgement:#相同则过
+                continue
+            else:
+                judgement = JUDGEMENT#若不同，执行下头的代码
+            change_times += 1#记变换一次
+            if change_times == 1:
+                first_i = i#若第一次变换，记录坐标
+            elif change_times%2 == 0:#若为偶数次变换，则是截到了整行
+                if change_times/2 == num_of_lines:#变换次数除以2，即为截到的行数
+                    last_i = i#记录下坐标
+                    break
+        else:#可能整页都是图片
+            first_i = 0
+            last_i = 15
     box = (0,first_i,l,last_i)
     im_lines = im.crop(box)#裁剪
     im_lines = im_lines.rotate(180)#翻转
@@ -203,11 +257,12 @@ def crop_pictures(scr_list):
         box = (0,0,l-25,w)
         im = im.crop(box)#削去下拉条
         l,w = im.size
-        for i in range(w):#自上而下遍历图片的每一列
+        for i in range(w):#自上而下遍历图片的每一行
             box = (0,i,l,i+1)#左上右下
             IM = im.crop(box)
-            judgement = judge(IM)
-            if judgement == True:
+            next_IM = im.crop((0,i+1,l,w))
+            judgement = judge(IM,next_IM)
+            if judgement:
                 if i != 0:
                     new_box = (0,i,l,w)
                     im = im.crop(new_box)
@@ -220,12 +275,13 @@ def crop_pictures(scr_list):
         for i in range(w):#自上而下遍历图片的每一行
             box = (0,i,l,i+1)#左上右下
             IM = im.crop(box)
-            judgement = judge(IM)
+            next_IM = im.crop((0,i+1,l,w))
+            judgement = judge(IM,next_IM)
             if judgement:
                 if i != 0:
                     new_box = (0,i,l,w)
                     im = im.crop(new_box)
-                    #print(("this part worked,too"))
+                    #print(("this part worked"))
                 break
             else:
                 continue
@@ -462,6 +518,6 @@ def main(wenku_id):
 
 driver = webdriver.Chrome()#用谷歌,只能用谷歌,用火狐的话要改好多
 #wenku_id = "02058322afaad1f34693daef5ef7ba0d4b736df2"
-wenku_id = "e02ddb5a27d3240c8447ef9d"
+wenku_id = "8eb7da000812a21614791711cc7931b764ce7b40"
 main(wenku_id)
 
