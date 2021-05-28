@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 爬取百度文库信息
-截图-图片裁剪-转文字
+截图-图片裁剪-拼合
+相当于截长图
 """
 import requests
 from bs4 import BeautifulSoup#提取网页中需要的内容
