@@ -47,8 +47,11 @@ def get_clean_window(num_of_pages,wenku_id):#登录百度文库，点击“展�
     close = card.find_element(By.CLASS_NAME,"close-btn")
     close.click()#关掉
     time.sleep(1)
-    read_all = driver.find_element(By.CLASS_NAME,"read-all")#展开
-    driver.execute_script("arguments[0].click();", read_all)#聚焦并点击
+    try:
+        read_all = driver.find_element(By.CLASS_NAME,"read-all")#展开
+        driver.execute_script("arguments[0].click();", read_all)#聚焦并点击
+    except:#可能没有这个元素
+        pass
     remove_list = ["//div[@class='header-wrapper no-full-screen new-header']",
                    "//div[@class='left-wrapper zoom-scale']/div[@class='no-full-screen']",
                    "//div[@class='reader-wrap']/div/div[@class='reader-topbar']",
@@ -104,7 +107,7 @@ def get_screenshot(scr_list,num_of_pages,title = ' '):
     times = height//page_height
 
     driver.execute_script("var q=document.documentElement.scrollTop=0")#回到顶部
-    for i in range(int(times*1.1)):
+    for i in range(int(times*1.1+1)):
         js = "var q=document.documentElement.scrollTop=" + str(i*page_height)
         driver.execute_script(js)
         scr_path = "D://wenku_pics//" + title + "//"
@@ -167,9 +170,9 @@ def judge(img,next_img):#判断图片是否完整
         table.append(0)
       else:
         table.append(1)
-        
-    del_pic_in_pic(wide=5,img=img)#防止图中图影响判断
-    del_pic_in_pic(wide=5,img=next_img)
+         
+    del_pic_in_pic(wide=15,img=img)#防止图中图影响判断
+    del_pic_in_pic(wide=15,img=next_img)
         
     img = img.convert('L')
     bw_img = img.point(table, '1')#图片二值化
