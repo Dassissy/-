@@ -78,7 +78,7 @@ def get_clean_window(num_of_pages,wenku_id):#登录百度文库，点击“展�
                               element.parentNode.removeChild(element)''',wm)
                               """
         
-def get_screenshot(scr_list,title = ' '):
+def get_screenshot(scr_list,num_of_pages,title = ' '):
     #不需要这部分了
     #js_0 = "var q=document.documentElement.scrollTop=" + str(height//2)#下拉引出奇怪东西
     #driver.execute_script(js_0)
@@ -91,17 +91,19 @@ def get_screenshot(scr_list,title = ' '):
         pass
     time.sleep(1)
     
-    height = driver.find_element(By.TAG_NAME,"body").size["height"]
-    page_height = 650#实际为730,截多一点
-    times = height//page_height
-    """
-    for i in range(int(times*1.5)):#加载图片
+    page_height = 680#实际为730,截多一点
+    
+    times = int(int(num_of_pages)*1.3)#type(num_of_pages) = str
+    for i in range(times):#加载图片
         js = "var q=document.documentElement.scrollTop=" + str(i*page_height)
         driver.execute_script(js)
-        time.sleep(0.2)"""
+        time.sleep(0.2)
     
+    height = driver.find_element(By.TAG_NAME,"body").size["height"]
+    times = height//page_height
+
     driver.execute_script("var q=document.documentElement.scrollTop=0")#回到顶部
-    for i in range(times):
+    for i in range(int(times*1.1)):
         js = "var q=document.documentElement.scrollTop=" + str(i*page_height)
         driver.execute_script(js)
         scr_path = "D://wenku_pics//" + title + "//"
@@ -109,8 +111,8 @@ def get_screenshot(scr_list,title = ' '):
             os.mkdir(scr_path)
         scr_name = scr_path + str(i+1) + ".png"
         scr_list.append(scr_name)
+        time.sleep(0.1)
         driver.save_screenshot(scr_name)
-        time.sleep(0.5)
     """不需要了
     #删除后三张图
     for i in range(2):#如此往复3次
@@ -131,6 +133,10 @@ def del_pic_in_pic(wide,img):
                 the_previous_is = True
             elif i == l-1:#假如已经是最后一个像素了
                 last_p = i#记录最后一个
+                if last_p - first_p >= wide:
+                    pass
+                else:#若不大于wide，就不执行下一步了
+                    continue
                 box = (first_p,0,last_p,1)
                 new_pic = Image.new("1",(last_p-first_p,1),"white")
                 img.paste(new_pic,box)#变成白色的
@@ -139,6 +145,10 @@ def del_pic_in_pic(wide,img):
                 continue
         elif the_previous_is:#即 == True:
             last_p = i#记录最后一个
+            if last_p - first_p >= wide:
+                pass
+            else:
+                continue
             box = (first_p,0,last_p,1)
             new_pic = Image.new("1",(last_p-first_p,1),"white")
             img.paste(new_pic,box)#变成白色的
@@ -228,6 +238,9 @@ def duplicate_removal(path, next_path):#去重
     length_of_lines = im_lines.size[1]
     l,w = next_im.size
     for i in range(w):
+        if i+length_of_lines == w-1:
+            del_path = next_path#整张重复，连同后面的一起删了
+            break
         box = (0,i,l,i+length_of_lines)
         next_im_lines = next_im.crop(box)
         if im_lines == next_im_lines:
@@ -235,6 +248,11 @@ def duplicate_removal(path, next_path):#去重
             next_im = next_im.crop(new_box)
             next_im.save(next_path)
             break
+    try:
+        type(del_path)
+    except NameError:#若未定义
+        del_path = False
+    return del_path
     
 def crop_pictures(scr_list):
     """
@@ -342,7 +360,20 @@ def crop_pictures(scr_list):
         if not i == len(scr_list)-1:#不是最后一个的话
             path = scr_list[i]
             next_path = scr_list[i+1]
-            duplicate_removal(path=path, next_path=next_path)
+            del_path = duplicate_removal(path=path, next_path=next_path)
+            if del_path:#若出现
+                break#退出循环
+    if del_path:
+        del_i = scr_list.index(del_path)
+        if del_i == len(scr_list)-1:#那么这是最后一张图了
+            os.remove(scr_list[-1])#先删图
+            del scr_list[-1]#再删路径
+        else:
+            times = len(scr_list)-del_i
+            for i in range(times):
+                os.remove(scr_list[-1])
+                del scr_list[-1]
+                
             
 def paste_images(im_path):
     lw_list = []#记录图片长宽
@@ -507,17 +538,18 @@ def main(wenku_id):
     get_clean_window(wenku_id=wenku_id,num_of_pages=num_of_pages)#把窗口的各种影响阅读的弹窗清一遍
     time.sleep(1)
     scr_list = []
-    html_dict = {}
-    error_dict = {}#字典不能连续赋值
-    get_screenshot(scr_list,title)#屏幕截图
+    #html_dict = {}
+    #error_dict = {}#字典不能连续赋值
+    get_screenshot(scr_list,num_of_pages,title)#屏幕截图
     crop_pictures(scr_list)#将不必要的部分裁去
     paste_images(im_path="D://wenku_pics//"+title)#传入文件夹名称
-    change_to_text(scr_list,html_dict,error_dict)#图片转文字
-    error_handling(error_dict,html_dict)#转文字网站服务器容易崩,所以搞一个错误处理
-    out(title,html_dict)#输出成文档
+    #change_to_text(scr_list,html_dict,error_dict)#图片转文字
+    #error_handling(error_dict,html_dict)#转文字网站服务器容易崩,所以搞一个错误处理
+    #out(title,html_dict)#输出成文档
 
+wenku_id = input("输入文库id，然后等输出就好了，可能会比较慢：")
 driver = webdriver.Chrome()#用谷歌,只能用谷歌,用火狐的话要改好多
 #wenku_id = "02058322afaad1f34693daef5ef7ba0d4b736df2"
-wenku_id = "8eb7da000812a21614791711cc7931b764ce7b40"
+#wenku_id = "7a381ded9cc3d5bbfd0a79563c1ec5da50e2d638"
 main(wenku_id)
 
