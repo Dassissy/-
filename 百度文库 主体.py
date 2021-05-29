@@ -43,10 +43,13 @@ def get_clean_window(num_of_pages,wenku_id):#登录百度文库，点击“展�
         driver.add_cookie(cookie)
     driver.get(url)#打开页面
     time.sleep(3)
-    card = driver.find_element(By.CLASS_NAME,"experience-card-content")#弹出奇怪的东西
-    close = card.find_element(By.CLASS_NAME,"close-btn")
-    close.click()#关掉
-    time.sleep(1)
+    try:#爬多了就不弹了
+        card = driver.find_element(By.CLASS_NAME,"experience-card-content")#弹出奇怪的东西
+        close = card.find_element(By.CLASS_NAME,"close-btn")
+        close.click()#关掉
+        time.sleep(1)
+    except:
+        pass
     try:
         read_all = driver.find_element(By.CLASS_NAME,"read-all")#展开
         driver.execute_script("arguments[0].click();", read_all)#聚焦并点击
@@ -70,7 +73,15 @@ def get_clean_window(num_of_pages,wenku_id):#登录百度文库，点击“展�
     for hx in hx_warps:
         driver.execute_script("""var element = arguments[0];
                               element.parentNode.removeChild(element)""",hx)
-#问题：水印可以被定位，但无法被删除
+    """搞不来
+    for i in range(int(num_of_pages)):#加宽页面
+        I = str(i+1)
+        xpath = "//div[@id='pageNo-" + I + "']"
+        page_ele = driver.find_element(By.XPATH,xpath)
+        size = page_ele.size
+        js = "arguments[0].style = 'width: 1050px; height: " +str(size['height'])+ "px';"
+        driver.execute_script(js, page_ele)"""
+#问题：水印可以被定位，但无法被删除，原因：加密
 """
     _wmlist = []#现在去水印
     for i in range(int(num_of_pages)):
@@ -97,7 +108,9 @@ def get_screenshot(scr_list,num_of_pages,title = ' '):
     
     page_height = 680#实际为730,截多一点
     
-    times = int(int(num_of_pages)*1.3)#type(num_of_pages) = str
+    times = int(int(num_of_pages)*2.4)
+    #type(num_of_pages) = str, 已知一个23页的图片，可截出38张图，38/23 = 1.65，可是要*2.4才能保证拉到底端
+    
     for i in range(times):#加载图片
         js = "var q=document.documentElement.scrollTop=" + str(i*page_height)
         driver.execute_script(js)
@@ -162,7 +175,7 @@ def del_pic_in_pic(wide,img):
             continue
     #img.show()
     
-def judge(img,next_img):#判断图片是否完整 
+def judge(img,next_img,pics_in=True):#判断图片是否完整 
     threshold = 210#定义灰度界限
     table = []
     for i in range(256):
@@ -171,8 +184,9 @@ def judge(img,next_img):#判断图片是否完整
       else:
         table.append(1)
          
-    del_pic_in_pic(wide=15,img=img)#防止图中图影响判断
-    del_pic_in_pic(wide=15,img=next_img)
+    if pics_in:#如果有图片在页面中
+        del_pic_in_pic(wide=15,img=img)#防止图中图影响判断
+        del_pic_in_pic(wide=15,img=next_img)
         
     img = img.convert('L')
     bw_img = img.point(table, '1')#图片二值化
@@ -204,7 +218,7 @@ def judge_2(IM,next_IM):#竖向检测
     else:
         return True
     
-def get_lines(im,num_of_lines):
+def get_lines(im,num_of_lines,pics_in):
     im = im.rotate(180)#翻转
     l,w = im.size
     change_times = 0
@@ -214,7 +228,7 @@ def get_lines(im,num_of_lines):
             box = (0,i,l,i+1)
             IM = im.crop(box)
             next_IM = im.crop((0,i,l,i+1))
-            JUDGEMENT = judge(IM,next_IM)
+            JUDGEMENT = judge(IM,next_IM,pics_in)
             if JUDGEMENT == judgement:#相同则过
                 continue
             else:
@@ -234,11 +248,11 @@ def get_lines(im,num_of_lines):
     im_lines = im_lines.rotate(180)#翻转
     return im_lines
         
-def duplicate_removal(path, next_path):#去重
+def duplicate_removal(path, next_path, pics_in):#去重
     im = Image.open(path)
     next_im = Image.open(next_path)
     num_of_lines = 1
-    im_lines = get_lines(im=im,num_of_lines=num_of_lines)
+    im_lines = get_lines(im=im,num_of_lines=num_of_lines,pics_in=pics_in)
     length_of_lines = im_lines.size[1]
     l,w = next_im.size
     for i in range(w):
@@ -258,7 +272,7 @@ def duplicate_removal(path, next_path):#去重
         del_path = False
     return del_path
     
-def crop_pictures(scr_list):
+def crop_pictures(scr_list,pics_in):
     """
     不需要截取了
     count = 0
@@ -283,7 +297,7 @@ def crop_pictures(scr_list):
             box = (0,i,l,i+1)#左上右下
             IM = im.crop(box)
             next_IM = im.crop((0,i+1,l,w))
-            judgement = judge(IM,next_IM)
+            judgement = judge(IM,next_IM,pics_in)
             if judgement:
                 if i != 0:
                     new_box = (0,i,l,w)
@@ -298,7 +312,7 @@ def crop_pictures(scr_list):
             box = (0,i,l,i+1)#左上右下
             IM = im.crop(box)
             next_IM = im.crop((0,i+1,l,w))
-            judgement = judge(IM,next_IM)
+            judgement = judge(IM,next_IM,pics_in)
             if judgement:
                 if i != 0:
                     new_box = (0,i,l,w)
@@ -364,7 +378,7 @@ def crop_pictures(scr_list):
         if not i == len(scr_list)-1:#不是最后一个的话
             path = scr_list[i]
             next_path = scr_list[i+1]
-            del_path = duplicate_removal(path=path, next_path=next_path)
+            del_path = duplicate_removal(path=path, next_path=next_path, pics_in=pics_in)
             if del_path:#若出现
                 break#退出循环
     if del_path:
@@ -537,7 +551,7 @@ def out(title,html_dict):
     else:
         duplicate_removal(lines,count)#下一层递归"""
 
-def main(wenku_id):
+def main(wenku_id,pics_in):
     title,num_of_pages = get_info(wenku_id=wenku_id)#首先拿到标题和总页数
     get_clean_window(wenku_id=wenku_id,num_of_pages=num_of_pages)#把窗口的各种影响阅读的弹窗清一遍
     time.sleep(1)
@@ -545,15 +559,22 @@ def main(wenku_id):
     #html_dict = {}
     #error_dict = {}#字典不能连续赋值
     get_screenshot(scr_list,num_of_pages,title)#屏幕截图
-    crop_pictures(scr_list)#将不必要的部分裁去
+    driver.quit()#不再需要图片转文字，故直接退出浏览器
+    crop_pictures(scr_list,pics_in)#将不必要的部分裁去
     paste_images(im_path="D://wenku_pics//"+title)#传入文件夹名称
     #change_to_text(scr_list,html_dict,error_dict)#图片转文字
     #error_handling(error_dict,html_dict)#转文字网站服务器容易崩,所以搞一个错误处理
     #out(title,html_dict)#输出成文档
 
 wenku_id = input("输入文库id，然后等输出就好了，可能会比较慢：")
+pics_in = input("页面中是否会出现较大的图片（大于1/4页面)？否则回车，是则任意键：")
+if pics_in:
+    pics_in = True
+else:
+    pics_in = False
+
 driver = webdriver.Chrome()#用谷歌,只能用谷歌,用火狐的话要改好多
 #wenku_id = "02058322afaad1f34693daef5ef7ba0d4b736df2"
 #wenku_id = "7a381ded9cc3d5bbfd0a79563c1ec5da50e2d638"
-main(wenku_id)
+main(wenku_id,pics_in)
 
