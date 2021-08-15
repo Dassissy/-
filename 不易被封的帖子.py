@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 爬取百度贴吧中指定帖子中的所有图片——————requests-bs4-re路线
-1.0,2.0,2.5,2.6,3.0
-3.2
+1.0,2.0,2.5,2.6,3.0,3.2
+3.5
 """
 import requests, os, re, time, random
 from bs4 import BeautifulSoup
+import threading
 
 
 def getHTTPtext(url):
-    time.sleep(1)
     try:
         r = requests.get(url, timeout=30)
         r.raise_for_status()
@@ -23,7 +23,7 @@ def getHTTPtext(url):
 
 
 def get_information(html, alist):
-    soup = BeautifulSoup(html, "html.parser")
+    first_soup = BeautifulSoup(html, "html.parser")
     r2 = re.findall(r'<title>.*?_百度贴吧', html[:5000])  # FIXME 这个html[:5000]太傻了
     r3 = r2[0].split("_")
     title = r2[0].split("_")[0][7:]
@@ -36,6 +36,7 @@ def get_information(html, alist):
     alist.append(title)
     alist.append(max_page)
     alist.append(ba_name)
+    return first_soup
 
 
 def download_pic(link, count, path_now, pn, max_page):
@@ -55,7 +56,7 @@ def download_pic(link, count, path_now, pn, max_page):
 
 def make_path(ba_name, title):
     a = input("文件路径是否使用默认设置?若否，输入从何处开始更改(从1开始)：")
-    path_list = ['D', 'tieba_pics', ba_name, title[:15]]
+    path_list = ['D', 'tieba_pics', ba_name, title[:15]]  # FIXME 吧名中可能出现“/”干扰此模块
     while a:
         a = int(a)
         b = input("现在在修改第{}层文件,输入文件名,回车以终止：".format(a))
@@ -76,18 +77,44 @@ def make_path(ba_name, title):
     return path_now
 
 
-def get_hrefs(max_page, seelz):
-    "一个生成器，可以次序输出一个帖子里所有图片的链接"
+def get_http_text(url):
+    """多线程特供"""
+    # 全程对 next_soup 上锁
+    global next_soup
+    threadLock.acquire()
+    try:
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        r.encoding = 'utf-8'
+    except:
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        r.encoding = 'utf-8'
+    next_html = r.text
+    next_soup = BeautifulSoup(next_html, "html.parser")
+    threadLock.release()
+    # print("get线程结束")
+
+
+def get_hrefs(max_page, seelz, first_soup):
+    """一个生成器，可以次序输出一个帖子里所有图片的链接"""
+    global threadLock
     p_num = 0  # 爬取的图片数
-    for pn in range(1, max_page + 1):
+    threadLock = threading.Lock()
+    for pn in range(2, max_page + 1):  # 从第二页开始爬取，因为第一页在之前已经爬取过了，这里不重复了
+        if not pn == 2:
+            first_soup = next_soup  # 这样还可以节省时间
         if not seelz:
             url = "https://tieba.baidu.com/p/" + str(ID) + "?see_lz=1&pn=" + str(pn)
         else:
             url = "https://tieba.baidu.com/p/" + str(ID) + "?pn=" + str(pn)
-        html = getHTTPtext(url)
-        soup = BeautifulSoup(html, "html.parser")
-        list1 = soup("img", "BDE_Image")
-        for i in list1:
+
+        get_next_html = threading.Thread(target=get_http_text(url))
+        get_next_html.start()
+
+        first_list = first_soup("img", "BDE_Image")
+        print("\r保存成功,这是第{}张图片,现在是第{}/{}页".format(p_num, pn, max_page), end='')
+        for i in first_list:
             href = i.attrs['src']
             pic_id = href.split("/")[-1]
             real_href = "http://tiebapic.baidu.com/forum/pic/item/" + pic_id
@@ -103,14 +130,14 @@ def main(ID):
         url = "https://tieba.baidu.com/p/" + str(ID) + "?see_lz=1"
     else:
         url = "https://tieba.baidu.com/p/" + str(ID)
-    html = getHTTPtext(url)
+    first_html = getHTTPtext(url)
     alist = []
-    get_information(html, alist)
+    first_soup = get_information(first_html, alist)
     title, max_page, ba_name = alist[0], int(alist[1]), alist[2]
     # 创建图片保存路径
     path_now = make_path(ba_name, title)
     # 开始爬取
-    for p_num, pn, real_href in get_hrefs(max_page, seelz):
+    for p_num, pn, real_href in get_hrefs(max_page, seelz, first_soup):
         download_pic(real_href, p_num, path_now, pn, max_page)
     
 
