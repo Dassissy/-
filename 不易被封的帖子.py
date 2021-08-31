@@ -101,25 +101,46 @@ def get_hrefs(max_page, seelz, first_soup):
     global threadLock
     p_num = 0  # 爬取的图片数
     threadLock = threading.Lock()
-    for pn in range(2, max_page + 1):  # 从第二页开始爬取，因为第一页在之前已经爬取过了，这里不重复了
-        if not pn == 2:
-            first_soup = next_soup  # 这样还可以节省时间
-        if not seelz:
-            url = "https://tieba.baidu.com/p/" + str(ID) + "?see_lz=1&pn=" + str(pn)
-        else:
-            url = "https://tieba.baidu.com/p/" + str(ID) + "?pn=" + str(pn)
-
-        get_next_html = threading.Thread(target=get_http_text(url))
-        get_next_html.start()
-
+    
+    if max_page == 1:
         first_list = first_soup("img", "BDE_Image")
-        print("\r保存成功,这是第{}张图片,现在是第{}/{}页".format(p_num, pn, max_page), end='')
+        print("\r保存成功,这是第{}张图片,现在是第1/1页".format(p_num), end='')  # 跳页时也要输出一次
         for i in first_list:
             href = i.attrs['src']
             pic_id = href.split("/")[-1]
             real_href = "http://tiebapic.baidu.com/forum/pic/item/" + pic_id
             p_num += 1
-            yield [p_num, pn, real_href]
+            yield [p_num, 1, real_href]
+
+    else:
+        for pn in range(2, max_page + 1 + 1):
+            # 这个函数的结构较为特殊，因为第一页的内容已经爬取过了，所以这里从第二页开始循环 
+            # 但是是在对前一页的链接进行保存，同时利用多线程爬取这一页的内容
+            # 所以在循环体中体现的就是从 2 到 max_page + 1 的一个过程
+
+            # 爬取到第一页时，还没有下一页的内容
+            if not pn == 2:
+                first_soup = next_soup
+            if not seelz:
+                url = "https://tieba.baidu.com/p/" + str(ID) + "?see_lz=1&pn=" + str(pn)
+            else:
+                url = "https://tieba.baidu.com/p/" + str(ID) + "?pn=" + str(pn)
+            
+            # 爬取到最后一页时，不再准备下一页的内容
+            if not pn == max_page + 1:
+                get_next_html = threading.Thread(target=get_http_text(url))
+                get_next_html.start()
+
+            first_list = first_soup("img", "BDE_Image")
+            # 跳页时需要输出一次
+            print("\r保存成功,这是第{}张图片,现在是第{}/{}页".format(p_num, pn-1, max_page), end='')
+
+            for i in first_list:
+                href = i.attrs['src']
+                pic_id = href.split("/")[-1]
+                real_href = "http://tiebapic.baidu.com/forum/pic/item/" + pic_id
+                p_num += 1
+                yield [p_num, pn-1, real_href]
             
 
 
@@ -138,6 +159,7 @@ def main(ID):
     path_now = make_path(ba_name, title)
     # 开始爬取
     for p_num, pn, real_href in get_hrefs(max_page, seelz, first_soup):
+        # 每次下载时都要输出
         download_pic(real_href, p_num, path_now, pn, max_page)
     
 
